@@ -11,9 +11,42 @@ function App() {
   }, [])
 
   async function loadLinks() {
+    // Try to fetch from a manifest first (generated at build time)
+    try {
+      const response = await fetch('/links/manifest.json')
+      if (response.ok) {
+        const files = await response.json()
+        await loadFromFiles(files)
+        return
+      }
+    } catch (e) {}
+    
+    // Fallback: try known date files
+    await loadFromDates()
+  }
+
+  async function loadFromFiles(files) {
+    const allLinks = []
+    
+    for (const file of files) {
+      try {
+        const response = await fetch(`/links/${file}`)
+        if (response.ok) {
+          const text = await response.text()
+          const date = file.replace('.md', '')
+          const parsed = parseLinks(text, date)
+          allLinks.push(...parsed.map(link => ({ ...link, date })))
+        }
+      } catch (e) {}
+    }
+    
+    setLinks(allLinks.sort((a, b) => new Date(b.date) - new Date(a.date)))
+    setLoading(false)
+  }
+
+  async function loadFromDates() {
     const dates = {}
     
-    // Only search last 30 days to avoid unnecessary 404s
     for (let i = 0; i < 30; i++) {
       const date = new Date()
       date.setDate(date.getDate() - i)
