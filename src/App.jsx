@@ -13,7 +13,8 @@ function App() {
   async function loadLinks() {
     const dates = {}
     
-    for (let i = 0; i < 90; i++) {
+    // Only search last 30 days to avoid unnecessary 404s
+    for (let i = 0; i < 30; i++) {
       const date = new Date()
       date.setDate(date.getDate() - i)
       const dateStr = date.toISOString().split('T')[0]
