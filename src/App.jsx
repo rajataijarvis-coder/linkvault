@@ -1,17 +1,57 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import './App.css'
 
 function App() {
   const [links, setLinks] = useState([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [expandedStats, setExpandedStats] = useState(false)
 
   useEffect(() => {
     loadLinks()
   }, [])
 
+  // Calculate stats from links
+  const stats = useMemo(() => {
+    const totalLinks = links.length
+    const uniqueDates = new Set(links.map(l => l.date)).size
+    const avgPerDay = uniqueDates > 0 ? (totalLinks / uniqueDates).toFixed(1) : 0
+    
+    // Links by date (last 14 days)
+    const linksByDate = links.reduce((acc, link) => {
+      acc[link.date] = (acc[link.date] || 0) + 1
+      return acc
+    }, {})
+    
+    // Get last 14 days sorted
+    const sortedDates = Object.keys(linksByDate)
+      .sort((a, b) => new Date(b) - new Date(a))
+      .slice(0, 14)
+    
+    // Calculate avg excluding empty days
+    const counts = Object.values(linksByDate)
+    const avgCount = counts.length > 0 
+      ? (counts.reduce((a, b) => a + b, 0) / counts.length).toFixed(1)
+      : 0
+    
+    // Find outliers (>2x avg or <0.5x avg)
+    const outliers = sortedDates.filter(date => {
+      const count = linksByDate[date]
+      return count > avgCount * 2 || count < avgCount * 0.5
+    })
+    
+    return {
+      totalLinks,
+      uniqueDates,
+      avgPerDay,
+      linksByDate,
+      sortedDates,
+      avgCount,
+      outliers
+    }
+  }, [links])
+
   async function loadLinks() {
-    // Try to fetch from a manifest first (generated at build time)
     try {
       const response = await fetch('/links/manifest.json')
       if (response.ok) {
@@ -20,8 +60,6 @@ function App() {
         return
       }
     } catch (e) {}
-    
-    // Fallback: try known date files
     await loadFromDates()
   }
 
@@ -34,7 +72,7 @@ function App() {
         if (response.ok) {
           const text = await response.text()
           const date = file.replace('.md', '')
-          const parsed = parseLinks(text, date)
+          const parsed = parseMarkdownLinks(text, date)
           allLinks.push(...parsed.map(link => ({ ...link, date })))
         }
       } catch (e) {}
@@ -45,7 +83,7 @@ function App() {
   }
 
   async function loadFromDates() {
-    const dates = {}
+    const allLinks = []
     
     for (let i = 0; i < 30; i++) {
       const date = new Date()
@@ -55,43 +93,64 @@ function App() {
         const response = await fetch(`/links/${dateStr}.md`)
         if (response.ok) {
           const text = await response.text()
-          const parsed = parseLinks(text, dateStr)
-          if (parsed.length > 0) {
-            dates[dateStr] = parsed
-          }
+          const parsed = parseMarkdownLinks(text, dateStr)
+          allLinks.push(...parsed.map(link => ({ ...link, date: dateStr })))
         }
       } catch (e) {}
     }
     
-    const allLinks = Object.entries(dates).flatMap(([date, links]) => 
-      links.map(link => ({ ...link, date }))
-    ).sort((a, b) => new Date(b.date) - new Date(a.date))
-    
-    setLinks(allLinks)
+    setLinks(allLinks.sort((a, b) => new Date(b.date) - new Date(a.date)))
     setLoading(false)
   }
 
-  function parseLinks(text, date) {
+  function parseMarkdownLinks(text, date) {
     const links = []
     const lines = text.split('\n')
     let currentLink = null
+    let currentSection = { title: '', url: '', desc: '', topic: '' }
     
     for (const line of lines) {
-      if (line.startsWith('- [')) {
-        const match = line.match(/- \[([ x])\] \[([^\]]+)\]\(([^)]+)\)(.*)/)
-        if (match) {
-          if (currentLink) links.push(currentLink)
-          currentLink = {
-            title: match[2],
-            url: match[3],
-            desc: match[4].trim()
-          }
+      // Match the new format: ## Title, **URL**, **Source**, **Topic**, **Added**, **Status**, **Notes**
+      if (line.startsWith('## ')) {
+        if (currentLink && currentLink.title) {
+          links.push(currentLink)
         }
-      } else if (line.startsWith('  - ') && currentLink) {
-        currentLink.desc += ' ' + line.replace(/^  - /, '')
+        currentSection = { 
+          title: line.replace('## ', '').trim(),
+          url: '',
+          desc: '',
+          topic: ''
+        }
+        currentLink = { ...currentSection }
+      } else if (line.trim().startsWith('- **URL:**')) {
+        const urlMatch = line.match(/- \*\*URL:\*\* (.+)/)
+        if (urlMatch && currentLink) {
+          currentLink.url = urlMatch[1].trim()
+        }
+      } else if (line.trim().startsWith('- **Source:**')) {
+        const sourceMatch = line.match(/- \*\*Source:\*\* (.+)/)
+        if (sourceMatch && currentLink) {
+          currentLink.source = sourceMatch[1].trim()
+        }
+      } else if (line.trim().startsWith('- **Topic:**')) {
+        const topicMatch = line.match(/- \*\*Topic:\*\* (.+)/)
+        if (topicMatch && currentLink) {
+          currentLink.topic = topicMatch[1].trim()
+        }
+      } else if (line.trim().startsWith('- **Notes:**')) {
+        const notesMatch = line.match(/- \*\*Notes:\*\* (.+)/)
+        if (notesMatch && currentLink) {
+          currentLink.desc = notesMatch[1].trim()
+        }
+      } else if (line.trim().startsWith('- **') && currentLink && currentLink.desc) {
+        // Continue previous notes
+        currentLink.desc += ' ' + line.trim()
       }
     }
-    if (currentLink) links.push(currentLink)
+    
+    if (currentLink && currentLink.title && currentLink.url) {
+      links.push(currentLink)
+    }
     
     return links
   }
@@ -99,11 +158,31 @@ function App() {
   const filteredLinks = links.filter(link => {
     const q = search.toLowerCase()
     return (
-      link.title.toLowerCase().includes(q) ||
-      link.url.toLowerCase().includes(q) ||
-      (link.desc && link.desc.toLowerCase().includes(q))
+      link.title?.toLowerCase().includes(q) ||
+      link.url?.toLowerCase().includes(q) ||
+      (link.desc && link.desc.toLowerCase().includes(q)) ||
+      (link.topic && link.topic.toLowerCase().includes(q))
     )
   })
+
+  const formatDate = (dateStr) => {
+    const date = new Date(dateStr)
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric'
+    })
+  }
+
+  const isToday = (dateStr) => {
+    const today = new Date().toISOString().split('T')[0]
+    return dateStr === today
+  }
+
+  const isYesterday = (dateStr) => {
+    const yesterday = new Date()
+    yesterday.setDate(yesterday.getDate() - 1)
+    return dateStr === yesterday.toISOString().split('T')[0]
+  }
 
   return (
     <div className="app">
@@ -111,6 +190,75 @@ function App() {
         <h1>Link<span>Vault</span></h1>
         <p>Your personal link collection</p>
       </header>
+
+      {/* Stats Widget */}
+      {!loading && links.length > 0 && (
+        <div className="stats-widget">
+          <div className="stats-header" onClick={() => setExpandedStats(!expandedStats)}>
+            <div className="stats-summary">
+              <div className="stat-item total">
+                <span className="stat-value">{stats.totalLinks}</span>
+                <span className="stat-label">Total Links</span>
+              </div>
+              <div className="stat-item">
+                <span className="stat-value">{stats.uniqueDates}</span>
+                <span className="stat-label">Days with Links</span>
+              </div>
+              <div className="stat-item">
+                <span className="stat-value">{stats.avgPerDay}</span>
+                <span className="stat-label">Avg/Day</span>
+              </div>
+              {stats.outliers.length > 0 && (
+                <div className="stat-item warning">
+                  <span className="stat-value">{stats.outliers.length}</span>
+                  <span className="stat-label">Unusual Days</span>
+                </div>
+              )}
+            </div>
+            <button className="stats-toggle">
+              {expandedStats ? '▼' : '▶'}
+            </button>
+          </div>
+
+          {expandedStats && (
+            <div className="stats-detail">
+              <p className="stats-info">
+                Daily breakdown (last 14 days with links). 
+                <span className="outlier-hint">Yellow = 2x above avg, Red = below 50% of avg</span>
+              </p>
+              <div className="daily-breakdown">
+                {stats.sortedDates.map(date => {
+                  const count = stats.linksByDate[date]
+                  const isHigh = count > stats.avgCount * 2
+                  const isLow = count < stats.avgCount * 0.5
+                  const dayLabel = isToday(date) ? 'Today' : isYesterday(date) ? 'Yesterday' : formatDate(date)
+                  
+                  return (
+                    <div 
+                      key={date} 
+                      className={`day-stat ${isHigh ? 'high' : ''} ${isLow ? 'low' : ''}`}
+                    >
+                      <div className="day-info">
+                        <span className="day-date">{dayLabel}</span>
+                        <span className="day-count">{count} links</span>
+                      </div>
+                      <div className="day-bar-container">
+                        <div 
+                          className="day-bar"
+                          style={{ 
+                            width: `${Math.min((count / (stats.avgCount * 3)) * 100, 100)}%`,
+                            backgroundColor: isHigh ? '#f59e0b' : isLow ? '#ef4444' : '#00d992'
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="search-container">
         <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -146,6 +294,9 @@ function App() {
                 <div className="link-info">
                   <div className="link-title">{link.title}</div>
                   <div className="link-url">{link.url}</div>
+                  {link.desc && (
+                    <div className="link-desc">{link.desc.substring(0, 120)}...</div>
+                  )}
                 </div>
                 <div className="link-meta">
                   <span className="link-date">{link.date}</span>
