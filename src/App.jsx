@@ -106,50 +106,43 @@ function App() {
   function parseMarkdownLinks(text, date) {
     const links = []
     const lines = text.split('\n')
-    let currentLink = null
-    let currentSection = { title: '', url: '', desc: '', topic: '' }
     
     for (const line of lines) {
-      // Match the new format: ## Title, **URL**, **Source**, **Topic**, **Added**, **Status**, **Notes**
-      if (line.startsWith('## ')) {
-        if (currentLink && currentLink.title) {
-          links.push(currentLink)
-        }
-        currentSection = { 
-          title: line.replace('## ', '').trim(),
-          url: '',
-          desc: '',
-          topic: ''
-        }
-        currentLink = { ...currentSection }
-      } else if (line.trim().startsWith('- **URL:**')) {
-        const urlMatch = line.match(/- \*\*URL:\*\* (.+)/)
-        if (urlMatch && currentLink) {
-          currentLink.url = urlMatch[1].trim()
-        }
-      } else if (line.trim().startsWith('- **Source:**')) {
-        const sourceMatch = line.match(/- \*\*Source:\*\* (.+)/)
-        if (sourceMatch && currentLink) {
-          currentLink.source = sourceMatch[1].trim()
-        }
-      } else if (line.trim().startsWith('- **Topic:**')) {
-        const topicMatch = line.match(/- \*\*Topic:\*\* (.+)/)
-        if (topicMatch && currentLink) {
-          currentLink.topic = topicMatch[1].trim()
-        }
-      } else if (line.trim().startsWith('- **Notes:**')) {
-        const notesMatch = line.match(/- \*\*Notes:\*\* (.+)/)
-        if (notesMatch && currentLink) {
-          currentLink.desc = notesMatch[1].trim()
-        }
-      } else if (line.trim().startsWith('- **') && currentLink && currentLink.desc) {
-        // Continue previous notes
-        currentLink.desc += ' ' + line.trim()
+      // Parse checkbox format: - [ ] [Title](URL) - Description
+      // or: - [x] [Title](URL) - Description
+      const checkboxMatch = line.match(/^-\s*\[[\sx]\]\s*\[([^\]]+)\]\(([^)]+)\)(?:\s+-\s+(.+))?$/i)
+      if (checkboxMatch) {
+        links.push({
+          title: checkboxMatch[1].trim(),
+          url: checkboxMatch[2].trim(),
+          desc: checkboxMatch[3] ? checkboxMatch[3].trim() : '',
+          date: date
+        })
+        continue
       }
-    }
-    
-    if (currentLink && currentLink.title && currentLink.url) {
-      links.push(currentLink)
+      
+      // Also support plain markdown links: [Title](URL)
+      const plainMatch = line.match(/^-\s*\[([^\]]+)\]\(([^)]+)\)(?:\s+-\s+(.+))?$/i)
+      if (plainMatch) {
+        links.push({
+          title: plainMatch[1].trim(),
+          url: plainMatch[2].trim(),
+          desc: plainMatch[3] ? plainMatch[3].trim() : '',
+          date: date
+        })
+        continue
+      }
+      
+      // Legacy format support (for backwards compatibility)
+      const legacyMatch = line.match(/^-\s*\[?\s*\]?\s*\[([^\]]+)\]\(([^)]+)\)(?:\s+-\s+(.+))?$/i)
+      if (legacyMatch) {
+        links.push({
+          title: legacyMatch[1].trim(),
+          url: legacyMatch[2].trim(),
+          desc: legacyMatch[3] ? legacyMatch[3].trim() : '',
+          date: date
+        })
+      }
     }
     
     return links
