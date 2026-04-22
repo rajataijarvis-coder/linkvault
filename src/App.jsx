@@ -64,19 +64,22 @@ function App() {
   }
 
   async function loadFromFiles(files) {
-    const allLinks = []
-    
-    for (const file of files) {
+    // Fetch all files in parallel for much faster loading
+    const filePromises = files.map(async (file) => {
       try {
         const response = await fetch(`/links/${file}`)
         if (response.ok) {
           const text = await response.text()
           const date = file.replace('.md', '')
           const parsed = parseMarkdownLinks(text, date)
-          allLinks.push(...parsed.map(link => ({ ...link, date })))
+          return parsed.map(link => ({ ...link, date }))
         }
       } catch (e) {}
-    }
+      return []
+    })
+    
+    const results = await Promise.all(filePromises)
+    const allLinks = results.flat()
     
     setLinks(allLinks.sort((a, b) => new Date(b.date) - new Date(a.date)))
     setLoading(false)
