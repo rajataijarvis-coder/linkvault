@@ -1,5 +1,6 @@
 # Links
 
+- [2026-05-22] https://youtube.com/playlist?list=PLoROMvodv4rOCXd21gf0CF4xr35yINeOy - Stanford CME295: Transformers and Large Language Models I Autumn 2025
 - [2026-04-07] https://santifer.io/career-ops-system
 - [2026-04-07] https://github.com/badlogic/genai-workshop/tree/main
 - [2026-04-07] https://x.com/xubinrencs/status/2041186947994091872
