@@ -136,6 +136,10 @@ body {
   color: var(--text-primary);
   transition: all 0.2s ease;
   height: 100%;
+  /* Keep long unbroken titles/URLs from forcing the grid card wider
+     than its column (esp. on mobile) — let the card clip instead. */
+  min-width: 0;
+  overflow: hidden;
 }
 
 .link-card:hover {
@@ -455,9 +459,15 @@ body {
 
   .link-title {
     font-size: 0.95rem;
+    /* Allow long titles to wrap on narrow screens instead of clipping */
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .link-url {
     font-size: 0.75rem;
+    /* Break long URLs so they never push the card outside the viewport */
+    white-space: normal;
+    word-break: break-all;
   }
 }
