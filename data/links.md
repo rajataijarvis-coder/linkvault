@@ -6,3 +6,6 @@
 - [2026-04-07] https://x.com/xubinrencs/status/2041186947994091872
 - [2026-03-12] https://towardsdatascience.com/using-langgraph-and-mcp-servers-to-create-my-own-voice-assistant/
 - [2026-03-12] https://medium.com/agentloop/building-autonomous-task-chains-with-langgraph-react-agents-and-multi-server-mcp-clients-90667eb30ff6
+- [2026-08-28] https://github.com/wlsdks/ontology-atlas - Agent-native ontology workbench: markdown graph humans + agents read/write, MCP-native, blast radius
+- [2026-08-28] https://github.com/langchain-ai/openwiki - Auto-generate docs from code (shared 2026-07-12)
+- [2026-08-28] https://hermes-agent.nousresearch.com/docs/user-guide/features/kanban - Hermes Kanban docs (shared 2026-07-12)
